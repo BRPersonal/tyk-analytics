@@ -13,12 +13,16 @@ def fetch_analytics_data() -> pandas.core.frame.DataFrame :
     # Fetch all data from the Redis list
     raw_data = redis_client.lrange(analytics_key, 0, -1)
 
-    # Parse JSON data
-    analytics_data = [json.loads(item) for item in raw_data]
+    # Print raw data for debugging
+    print("Raw data from Redis:", raw_data)
 
-    # Convert to DataFrame for analysis
-    df = pd.DataFrame(analytics_data)
-    print("type of df=", type(df))
+    # # Parse JSON data
+    # analytics_data = [json.loads(item) for item in raw_data]
+    #
+    # # Convert to DataFrame for analysis
+    # df = pd.DataFrame(analytics_data)
+    # print("type of df=", type(df))
+    df = pd.DataFrame()
 
     return df
 
