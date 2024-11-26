@@ -1,7 +1,11 @@
 import pandas.core.frame
 import redis
 import pandas as pd
-import json
+import msgpack
+import base64
+import csv
+from datetime import datetime
+from io import StringIO
 
 def fetch_analytics_data() -> pandas.core.frame.DataFrame :
     redis_host = 'localhost'
@@ -13,17 +17,21 @@ def fetch_analytics_data() -> pandas.core.frame.DataFrame :
     # Fetch all data from the Redis list
     raw_data = redis_client.lrange(analytics_key, 0, -1)
 
-    # Print raw data for debugging
-    print("Raw data from Redis:", raw_data)
+    for encoded_data in raw_data:
+        unpacked_data = msgpack.unpackb(encoded_data,raw=False)
+        print("-" * 50)
 
-    # # Parse JSON data
-    # analytics_data = [json.loads(item) for item in raw_data]
-    #
-    # # Convert to DataFrame for analysis
-    # df = pd.DataFrame(analytics_data)
-    # print("type of df=", type(df))
+        if (type(unpacked_data) == dict):
+            print("keys:", unpacked_data.keys())
+
+        apiKey = unpacked_data.get('APIKey')
+        if apiKey:
+            print(f"apiKey={apiKey}")
+            print(f"apiName={unpacked_data.get('APIName')}")
+            print(f"apiId={unpacked_data.get('APIID')}")
+
+
     df = pd.DataFrame()
-
     return df
 
 # Function to generate a simple report
