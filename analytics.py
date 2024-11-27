@@ -13,6 +13,45 @@ def get_plan(api_key:str) -> str:
     return plan
 
 
+def group_by_plan(data_frame: pd.DataFrame) -> pd.DataFrame:
+    """
+    Groups the DataFrame by 'Plan' and returns the aggregated results.
+
+    Args:
+        data_frame (pd.DataFrame): The input DataFrame containing analytics data.
+
+    Returns:
+        pd.DataFrame: A DataFrame grouped by 'Plan'.
+    """
+    return data_frame.groupby('Plan').agg('count').reset_index()
+
+
+import pandas as pd
+import json
+
+
+def dataframe_to_json(data_frame: pd.DataFrame) -> str:
+    """
+    Converts a Pandas DataFrame to a JSON formatted string with additional metadata.
+
+    Args:
+        data_frame (pd.DataFrame): The input DataFrame to be converted.
+
+    Returns:
+        str: A JSON formatted string containing the message, status code, and DataFrame data.
+    """
+    # Convert the DataFrame to JSON
+    df_json = data_frame.to_json(orient='records')  # Use 'records' for a list of dictionaries
+
+    # Create the final response structure
+    response = {
+        "message": "operation success",
+        "status_code": 200,
+        "response": json.loads(df_json)  # Load the JSON string into a Python object
+    }
+
+    return json.dumps(response)  # Convert the final response back to a JSON string
+
 def filter_by_date_range(data_frame: pd.DataFrame, date_range: list[int]) -> pd.DataFrame:
     """
     Filters the DataFrame for a custom date range using TimeStamp.
@@ -29,6 +68,29 @@ def filter_by_date_range(data_frame: pd.DataFrame, date_range: list[int]) -> pd.
 
     # Ensure that TimeStamp is treated as an long for comparison
     return data_frame[data_frame['TimeStamp'].apply(lambda x: start_timestamp <= x[0] <= end_timestamp)]
+
+
+import pandas as pd
+
+
+def select_columns(df: pd.DataFrame, columns: list) -> pd.DataFrame:
+    """
+    Selects specific columns from a DataFrame based on the provided list.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame from which to select columns.
+        columns (list): A list of column names to select.
+
+    Returns:
+        pd.DataFrame: A new DataFrame containing only the specified columns.
+    """
+    # Check if the provided columns exist in the DataFrame
+    for col in columns:
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' does not exist in the DataFrame.")
+
+    # Select and return the specified columns
+    return df[columns]
 
 def fetch_analytics_data() -> pd.DataFrame :
     redis_host = 'localhost'
@@ -79,6 +141,16 @@ def main():
 
     filtered_df = filter_by_date_range(df,[1732604550,1732605000])
     print("filtered_df=\n", filtered_df)
+
+    grouped_df = group_by_plan(df)
+    print("grouped df=\n", grouped_df)
+
+    selected_columns_df = select_columns(df,["Plan","APIKey","APIName"])
+    json_output = dataframe_to_json(selected_columns_df)
+    print("json_output=\n",json_output)
+
+    #check if original df is unaltered
+    print("original df after grouping and filtering=\n", df)
 
 if __name__ == '__main__':
     main()
