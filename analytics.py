@@ -1,6 +1,7 @@
 import redis
 import pandas as pd
 import msgpack
+import json
 
 def get_plan(api_key:str) -> str:
 
@@ -25,9 +26,10 @@ def group_by_plan(data_frame: pd.DataFrame) -> pd.DataFrame:
     """
     return data_frame.groupby('Plan').agg('count').reset_index()
 
-
-import pandas as pd
-import json
+def group_by_key_and_sort_descending(data_frame: pd.DataFrame,key:str) -> pd.DataFrame:
+    grouped_df = data_frame.groupby(key).size().reset_index(name='count')
+    sorted_df = grouped_df.sort_values(by='count', ascending=False).reset_index(drop=True)
+    return sorted_df
 
 
 def dataframe_to_json(data_frame: pd.DataFrame) -> str:
@@ -70,10 +72,7 @@ def filter_by_date_range(data_frame: pd.DataFrame, date_range: list[int]) -> pd.
     return data_frame[data_frame['TimeStamp'].apply(lambda x: start_timestamp <= x[0] <= end_timestamp)]
 
 
-import pandas as pd
-
-
-def select_columns(df: pd.DataFrame, columns: list) -> pd.DataFrame:
+def select_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     """
     Selects specific columns from a DataFrame based on the provided list.
 
@@ -139,18 +138,23 @@ def main():
     df = fetch_analytics_data()
     print("df=\n", df)
 
-    filtered_df = filter_by_date_range(df,[1732604550,1732605000])
-    print("filtered_df=\n", filtered_df)
+    if not df.empty:
 
-    grouped_df = group_by_plan(df)
-    print("grouped df=\n", grouped_df)
+        filtered_df = filter_by_date_range(df,[1732604550,1732605000])
+        print("filtered_df=\n", filtered_df)
 
-    selected_columns_df = select_columns(df,["Plan","APIKey","APIName"])
-    json_output = dataframe_to_json(selected_columns_df)
-    print("json_output=\n",json_output)
+        grouped_df = group_by_plan(df)
+        print("grouped df=\n", grouped_df)
 
-    #check if original df is unaltered
-    print("original df after grouping and filtering=\n", df)
+        grouped_df2 = group_by_key_and_sort_descending(df,"APIName")
+        print("grouped df2=\n", grouped_df2)
+
+        selected_columns_df = select_columns(df,["Plan","APIKey","APIName"])
+        json_output = dataframe_to_json(selected_columns_df)
+        print("json_output=\n",json_output)
+
+        #check if original df is unaltered
+        print("original df after grouping and filtering=\n", df)
 
 if __name__ == '__main__':
     main()
