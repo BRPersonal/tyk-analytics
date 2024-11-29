@@ -1,5 +1,4 @@
 import pandas as pd
-from analytics_repository import write_to_table
 
 #If 1st arg is named as df, it is reported as shadow variable
 #because it shares the same name as variable we declared in
@@ -21,7 +20,5 @@ if __name__ == "__main__":
     report_by_api_name = do_group_by(df,"APIName")
     print("By API Name\n", report_by_api_name)
 
-    write_to_table("report_by_api_key", report_by_apikey)
-    write_to_table("report_by_api_name", report_by_api_name)
 
 
