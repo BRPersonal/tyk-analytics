@@ -6,7 +6,7 @@ import json
 def get_plan(api_key:str) -> str:
 
     plan = None
-    #TODO: remove hard-coding hit api get-key/{api_key} and extract apply_policies from response and return it
+    #TODO: remove hard-coding - we need to join with key table on api_key to get plan
     if api_key == "FleetStudioef16fdc2aeeb4984b2abe643f7d1cbf4":
         plan = "FreeDesign"
     elif api_key == "FleetStudio9b8f2bc601df46eeb6f94b1af5ba13b3":

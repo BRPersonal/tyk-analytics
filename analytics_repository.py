@@ -1,10 +1,11 @@
-import pandas as pd
-import mysql.connector
-from mysql.connector import Error
-import psycopg2
-from datetime import datetime
-from dotenv import load_dotenv
 import os
+from datetime import date,datetime
+import mysql.connector
+import pandas as pd
+import psycopg2
+from dotenv import load_dotenv
+import json
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -21,10 +22,10 @@ db_config = {
 
 def write_analytics_data(data_frame:pd.core.frame.DataFrame) -> None:
     try:
-        if (db_config["port"] == "3306"):
+        if db_config["port"] == "3306":
             connection = mysql.connector.connect(**db_config)
             print("writing to MySql")
-        elif (db_config["port"] == "5432"):
+        elif db_config["port"] == "5432":
             connection = psycopg2.connect(**db_config)
             print("writing to PostGre")
 
@@ -69,7 +70,62 @@ def write_analytics_data(data_frame:pd.core.frame.DataFrame) -> None:
             connection.close()
             print("Database connection is closed.")
 
-if __name__ == "__main__":
+def dict_to_json_string(data_dict:dict) -> str:
+    def custom_date_serializer(obj):
+        if isinstance(obj, date):
+            return obj.strftime('%Y-%m-%d')  # format date as YYYY-mm-dd
+        raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
+
+    return json.dumps(data_dict, indent=4,default=custom_date_serializer) #convert to json with pretty printing
+
+def fetch_and_group_by_column(group_by_column: str) -> dict:
+    try:
+        if db_config["port"] == "3306":
+            connection = mysql.connector.connect(**db_config)
+            print("Reading from MySql")
+        elif db_config["port"] == "5432":
+            connection = psycopg2.connect(**db_config)
+            print("Reading from PostGre")
+
+        with connection.cursor() as cursor:
+            # Define the SQL query
+            sql_query = """
+            SELECT DISTINCT
+                a.RunDate, a.APIKey, a.APIName, a.APIID, a.ResponseCode,
+                a.Day, a.Month, a.TimeStamp,
+                b.userId, b.tier, b.refApp
+            FROM tyk_analytics_data a, key_tbl b
+            where b.value = a.APIKey;
+            """
+
+            # Execute the query
+            cursor.execute(sql_query)
+
+            # Fetch all results
+            results = cursor.fetchall()
+
+            # Get list of column names from cursor description which is a list of tuples.
+            #First element of a tuple is the columnName
+            column_names = [desc[0] for desc in cursor.description]
+
+            # Construct the dictionary grouped by tier
+            result_dict = {"groupBy" : group_by_column}
+
+            for row in results:
+                entry = dict(zip(column_names, row))  # Create a dictionary using column names
+                group_by_value = entry[group_by_column]  # Accessing 'grouo by' using field name
+
+                if group_by_value not in result_dict:
+                    result_dict[group_by_value] = []
+
+                result_dict[group_by_value].append(entry)
+
+            return result_dict
+
+    finally:
+        connection.close()
+
+def test_insert() -> None:
     data = {
         "APIKey": ["k1", "k2","k3","k4","k5"],
         "APIName": ["name1", "name2","name3","name4","name5"],
@@ -85,3 +141,13 @@ if __name__ == "__main__":
 
     df = pd.DataFrame(data)
     write_analytics_data(df)
+
+def test_group_by() -> None:
+    #result = fetch_and_group_by_column("tier")
+    result = fetch_and_group_by_column("refApp")
+    #result = fetch_and_group_by_column("userId")
+    json_result = dict_to_json_string(result)
+    print(json_result)
+
+if __name__ == "__main__":
+    test_group_by()
