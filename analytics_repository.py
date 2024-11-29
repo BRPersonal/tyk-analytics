@@ -1,7 +1,6 @@
 import os
 from datetime import date,datetime
 import mysql.connector
-import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 import json
@@ -20,7 +19,7 @@ db_config = {
 }
 
 
-def write_analytics_data(data_frame:pd.core.frame.DataFrame) -> None:
+def write_analytics_data(analytics_records:list[dict]) -> None:
     try:
         if db_config["port"] == "3306":
             connection = mysql.connector.connect(**db_config)
@@ -41,7 +40,7 @@ def write_analytics_data(data_frame:pd.core.frame.DataFrame) -> None:
         today_date = datetime.now().date()
 
         # Iterate over DataFrame rows and execute insert query for each row
-        for index, row in data_frame.iterrows():
+        for row in analytics_records:
             cursor.execute(insert_query, (
                 today_date,
                 row['APIKey'],
@@ -58,14 +57,16 @@ def write_analytics_data(data_frame:pd.core.frame.DataFrame) -> None:
 
         # Commit the transaction
         connection.commit()
-        print(f"{len(data_frame)} records inserted successfully.")
+        print(f"{len(analytics_records)} records inserted successfully.")
 
     except Exception as error:
         print(f"Error inserting records: {error}")
+        raise error
     finally:
         # Closing cursor and connection
         if cursor:
             cursor.close()
+            print("cursor is closed.")
         if connection:
             connection.close()
             print("Database connection is closed.")
@@ -125,22 +126,6 @@ def fetch_and_group_by_column(group_by_column: str) -> dict:
     finally:
         connection.close()
 
-def test_insert() -> None:
-    data = {
-        "APIKey": ["k1", "k2","k3","k4","k5"],
-        "APIName": ["name1", "name2","name3","name4","name5"],
-        "APIID": ["id1", "id2","id3","id4","id5"],
-        "Host": ["www.example.com", "www.example.org","www.http-bin.org","www.http-bin.org","www.http-bin.org"],
-        "Path": ["/posts", "/comments","/get","/delete","/put"],
-        "ResponseCode": ["200", "404","200","200","200"],
-        "Day": [26, 26,27,27,28],
-        "Month": [11, 11,11,11,11],
-        "TimeStamp": [1732608151, 1732608152,1732694551,1732694552,1732780951],
-        "OrgID": ["FleetStudio", "FleetStudio","FleetStudio","FleetStudio","FleetStudio"]
-    }
-
-    df = pd.DataFrame(data)
-    write_analytics_data(df)
 
 def test_group_by() -> None:
     #result = fetch_and_group_by_column("tier")
