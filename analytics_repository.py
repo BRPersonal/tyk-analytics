@@ -30,14 +30,24 @@ def write_analytics_data(analytics_records:list[dict]) -> None:
 
         cursor = connection.cursor()
 
+        # Get today's date in 'YYYY-MM-DD' format
+        today_date = datetime.now().date()
+
+        # Prepare SQL query to DELETE records for today's date
+        delete_query =  """
+                            DELETE FROM tyk_analytics_data WHERE RunDate = %s;
+                        """
+
+        # Execute the delete query
+        cursor.execute(delete_query, (today_date,)) #to make it a sequence you need extra comma
+        print(f"Deleted records for RunDate: {today_date}")
+
         # Prepare SQL query to INSERT a record into the database.
         insert_query = """
             INSERT INTO tyk_analytics_data (RunDate, APIKey, APIName, APIID, Host, Path, ResponseCode, Day, Month, TimeStamp, OrgID)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
 
-        # Get today's date in 'YYYY-MM-DD' format
-        today_date = datetime.now().date()
 
         # Iterate over DataFrame rows and execute insert query for each row
         for row in analytics_records:
@@ -88,28 +98,39 @@ def fetch_and_group_by_column(group_by_column: str) -> dict:
             connection = psycopg2.connect(**db_config)
             print("Reading from PostGre")
 
+        # Get today's date
+        today_date = datetime.now().date()
+        day = 29
+
         with connection.cursor() as cursor:
             # Define the SQL query
             sql_query = """
-            SELECT DISTINCT
+            SELECT 
                 a.RunDate, a.APIKey, a.APIName, a.APIID, a.ResponseCode,
                 a.Day, a.Month, a.TimeStamp,
                 b.userId, b.tier, b.refApp
             FROM tyk_analytics_data a, key_tbl b
-            where b.value = a.APIKey;
+            where b.value = a.APIKey
+            AND a.RunDate = %s
+            AND a.Day = %s;
             """
 
             # Execute the query
-            cursor.execute(sql_query)
+            cursor.execute(sql_query, (today_date,day))
 
             # Fetch all results
             results = cursor.fetchall()
+
+            #check if resultset is empty
+            if not results:
+                print("No records returned from the query")
+                return None
 
             # Get list of column names from cursor description which is a list of tuples.
             #First element of a tuple is the columnName
             column_names = [desc[0] for desc in cursor.description]
 
-            # Construct the dictionary grouped by tier
+            # Construct the dictionary grouped by given column
             result_dict = {"groupBy" : group_by_column}
 
             for row in results:
@@ -124,6 +145,7 @@ def fetch_and_group_by_column(group_by_column: str) -> dict:
             return result_dict
 
     finally:
+        print("closing connection")
         connection.close()
 
 
@@ -131,8 +153,10 @@ def test_group_by() -> None:
     #result = fetch_and_group_by_column("tier")
     result = fetch_and_group_by_column("refApp")
     #result = fetch_and_group_by_column("userId")
-    json_result = dict_to_json_string(result)
-    print(json_result)
+
+    if result:
+        json_result = dict_to_json_string(result)
+        print(json_result)
 
 if __name__ == "__main__":
     test_group_by()
