@@ -98,10 +98,6 @@ def fetch_and_group_by_column(group_by_column: str) -> dict:
             connection = psycopg2.connect(**db_config)
             print("Reading from PostGre")
 
-        # Get today's date
-        today_date = datetime.now().date()
-        day = 29
-
         with connection.cursor() as cursor:
             # Define the SQL query
             sql_query = """
@@ -110,13 +106,12 @@ def fetch_and_group_by_column(group_by_column: str) -> dict:
                 a.Day, a.Month, a.TimeStamp,
                 b.userId, b.tier, b.refApp
             FROM tyk_analytics_data a, key_tbl b
-            where b.value = a.APIKey
-            AND a.RunDate = %s
-            AND a.Day = %s;
+            WHERE b.value = a.APIKey
+            ORDER BY b.userId DESC
             """
 
             # Execute the query
-            cursor.execute(sql_query, (today_date,day))
+            cursor.execute(sql_query)
 
             # Fetch all results
             results = cursor.fetchall()
