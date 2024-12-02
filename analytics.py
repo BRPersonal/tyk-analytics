@@ -28,14 +28,8 @@ def fetch_analytics_data() -> list[dict] :
         record = {
             "APIKey": api_key,
             "APIName": unpacked_data.get("APIName"),
-            "APIID": unpacked_data.get("APIID"),
-            "Host": unpacked_data.get("Host"),
-            "Path": unpacked_data.get("Path"),
             "ResponseCode": unpacked_data.get("ResponseCode"),
-            "Day": unpacked_data.get("Day"),
-            "Month": unpacked_data.get("Month"),
             "TimeStamp": unpacked_data.get("TimeStamp")[0],   #first element alone is enough
-            "OrgID": unpacked_data.get("OrgID")
         }
         print(f"record={record}")
 

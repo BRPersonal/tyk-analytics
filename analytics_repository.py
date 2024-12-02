@@ -18,6 +18,10 @@ db_config = {
     'database': os.getenv('DB_DATABASE')
 }
 
+def get_reqeust_date(timestamp : int) -> datetime.date:
+    readable_time = datetime.fromtimestamp(timestamp)
+    date_part = readable_time.date()
+    return date_part
 
 def write_analytics_data(analytics_records:list[dict]) -> None:
     try:
@@ -44,10 +48,9 @@ def write_analytics_data(analytics_records:list[dict]) -> None:
 
         # Prepare SQL query to INSERT a record into the database.
         insert_query = """
-            INSERT INTO tyk_analytics_data (RunDate, APIKey, APIName, APIID, Host, Path, ResponseCode, Day, Month, TimeStamp, OrgID)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            INSERT INTO tyk_analytics_data (RunDate, APIKey, APIName, ResponseCode, RequestDate)
+            VALUES (%s, %s, %s, %s, %s);
             """
-
 
         # Iterate over DataFrame rows and execute insert query for each row
         for row in analytics_records:
@@ -55,14 +58,8 @@ def write_analytics_data(analytics_records:list[dict]) -> None:
                 today_date,
                 row['APIKey'],
                 row['APIName'],
-                row['APIID'],
-                row['Host'],
-                row['Path'],
                 row['ResponseCode'],
-                row['Day'],
-                row['Month'],
-                row['TimeStamp'],
-                row['OrgID']
+                get_reqeust_date(row['TimeStamp'])
             ))
 
         # Commit the transaction
