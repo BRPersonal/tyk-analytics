@@ -1,12 +1,9 @@
 import os
-from datetime import date,datetime
-import mysql.connector
-import psycopg2
-from dotenv import load_dotenv
-import json
+from datetime import date, datetime
 import pandas as pd
-from sqlalchemy import create_engine,text
-
+from pandas.core.frame import DataFrame
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +27,10 @@ def get_db_url() -> str :
         print("Connecting to PostGre")
         return "postgresql://" + suffix
 
+def execute_sql_query(query : str) -> DataFrame:
+    db_url = get_db_url()
+    engine = create_engine(db_url)
+    return pd.read_sql_query(query, engine)
 
 def convert_to_date(timestamp : int) -> datetime.date:
     readable_time = datetime.fromtimestamp(timestamp)
@@ -49,28 +50,28 @@ def write_analytics_data(analytics_records:list[dict]) -> None:
         with engine.connect() as connection:
             # Prepare SQL query to DELETE records for today's date
             delete_query = text("""
-                            DELETE FROM tyk_analytics_data WHERE RunDate = :run_date;
+                            DELETE FROM tyk_analytics_data WHERE run_date = :runDate;
                            """)
 
             # Execute the delete query
-            connection.execute(delete_query, {'run_date': today_date})
+            connection.execute(delete_query, {'runDate': today_date})
 
             print(f"Deleted records for RunDate: {today_date}")
 
             # Prepare SQL query to INSERT a record into the database.
             insert_query = text("""
-                INSERT INTO tyk_analytics_data (RunDate, APIKey, APIName, ResponseCode, RequestDate)
-                VALUES (:run_date, :api_key, :api_name, :response_code, :request_date);
+                INSERT INTO tyk_analytics_data (run_date, api_key, api_name, response_code, request_date)
+                VALUES (:runDate, :apiKey, :apiName, :responseCode, :requestDate);
                 """)
 
             # Iterate over DataFrame rows and execute insert query for each row
             for row in analytics_records:
                 connection.execute(insert_query, {
-                    'run_date': today_date,
-                    'api_key': row['APIKey'],
-                    'api_name': row['APIName'],
-                    'response_code': row['ResponseCode'],
-                    'request_date': convert_to_date(row['TimeStamp'])
+                    'runDate': today_date,
+                    'apiKey': row['APIKey'],
+                    'apiName': row['APIName'],
+                    'responseCode': row['ResponseCode'],
+                    'requestDate': convert_to_date(row['TimeStamp'])
                 })
 
             # Commit the transaction
@@ -91,31 +92,27 @@ def get_request_counts(
     start_date_str = start_date.strftime('%Y-%m-%d')
     end_date_str = end_date.strftime('%Y-%m-%d')
 
-    #Step 1: Create SQLAlchemy engine
-    db_url = get_db_url()
-    engine = create_engine(db_url)
-
     # Step 2: Execute the SQL query with dynamic date parameters
     if user_id:
-        user_id_filter = f"and b.userId={user_id}"
+        user_id_filter = f"and b.user_id={user_id}"
     else:
         user_id_filter = ""
 
     query = f"""
     SELECT
-        a.RequestDate as request_date,
-        b.refApp as ref_app,
-        b.userId as user_id,
+        a.request_date,
+        b.ref_app,
+        b.user_id,
         COUNT(*) AS cntr
     FROM tyk_analytics_data a, key_tbl b
-    WHERE a.RequestDate BETWEEN '{start_date_str}' AND '{end_date_str}'
+    WHERE a.request_date BETWEEN '{start_date_str}' AND '{end_date_str}'
     {user_id_filter}
-    and b.value = a.APIKey
-    GROUP BY a.RequestDate, b.refApp, b.userId;
+    and b.value = a.api_key
+    GROUP BY a.request_date, b.ref_app, b.user_id;
     """
 
-    # Fetching data into a DataFrame
-    df = pd.read_sql_query(query, engine)
+    # Fetch data from database into a DataFrame
+    df = execute_sql_query(query)
 
     if df.empty:
         print("No records found")
@@ -132,15 +129,15 @@ def get_request_counts(
 
 def fetch_and_group_by_column() -> None:
     start_date = date(2024, 12, 1)
-    end_date = date(2024, 12, 2)
+    end_date = date(2024, 12, 3)
 
     #group_by_column_names = ["request_date"]
-    #group_by_column_names = ["request_date", "ref_app"]
-    group_by_column_names = ["ref_app", "user_id"]
+    group_by_column_names = ["request_date", "ref_app"]
+    #group_by_column_names = ["ref_app", "user_id"]
     result = get_request_counts(group_by_column_names=group_by_column_names,
                                 start_date=start_date,
                                 end_date=end_date,
-                                user_id = 3)
+                                user_id = None)
     print(result)
 
 
