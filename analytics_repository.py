@@ -22,18 +22,13 @@ db_config = {
 
 def get_db_url() -> str :
     suffix = f"{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+
     if db_config["port"] == "3306":
         print("Connecting to MySql")
         return "mysql+pymysql://" + suffix
     elif db_config["port"] == "5432":
         print("Connecting to PostGre")
         return "postgresql://" + suffix
-
-def correct_case_in_column_name(data_frame:pd.core.frame.DataFrame,column_name : str) -> str:
-    if column_name in data_frame.columns:
-        return column_name
-    else:
-        return column_name.lower()
 
 
 def convert_to_date(timestamp : int) -> datetime.date:
@@ -97,7 +92,10 @@ def write_analytics_data(analytics_records:list[dict]) -> None:
             print("Database connection is closed.")
 
 
-def get_request_counts(db_url: str, group_by_column_names: list[str], start_date: date, end_date: date) -> list[dict]:
+def get_request_counts(db_url: str,
+                       group_by_column_names: list[str],
+                       start_date: date, end_date: date,
+                       user_id: int | None) -> list[dict]:
 
     # Convert dates to string format for SQL query
     start_date_str = start_date.strftime('%Y-%m-%d')
@@ -107,6 +105,11 @@ def get_request_counts(db_url: str, group_by_column_names: list[str], start_date
     engine = create_engine(db_url)
 
     # Step 2: Execute the SQL query with dynamic date parameters
+    if user_id:
+        user_id_filter = f"and b.userId={user_id}"
+    else:
+        user_id_filter = ""
+
     query = f"""
     SELECT
         a.RequestDate as request_date,
@@ -115,12 +118,17 @@ def get_request_counts(db_url: str, group_by_column_names: list[str], start_date
         COUNT(*) AS cntr
     FROM tyk_analytics_data a, key_tbl b
     WHERE a.RequestDate BETWEEN '{start_date_str}' AND '{end_date_str}'
+    {user_id_filter}
     and b.value = a.APIKey
     GROUP BY a.RequestDate, b.refApp, b.userId;
     """
 
     # Fetching data into a DataFrame
     df = pd.read_sql_query(query, engine)
+
+    if df.empty:
+        print("No records found")
+        return None
 
     # Step 2: Group by one or more columns and sum 'cntr'.
     grouped_df = df.groupby(group_by_column_names, as_index=False)['cntr'].sum()
@@ -135,10 +143,14 @@ def fetch_and_group_by_column() -> None:
     start_date = date(2024, 12, 1)
     end_date = date(2024, 12, 2)
 
-    group_by_column_names = ["request_date"]
+    #group_by_column_names = ["request_date"]
     #group_by_column_names = ["request_date", "ref_app"]
     group_by_column_names = ["ref_app", "user_id"]
-    result = get_request_counts(get_db_url(),group_by_column_names,start_date,end_date)
+    result = get_request_counts(db_url=get_db_url(),
+                                group_by_column_names=group_by_column_names,
+                                start_date=start_date,
+                                end_date=end_date,
+                                user_id = 3)
     print(result)
 
 
