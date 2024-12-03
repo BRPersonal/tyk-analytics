@@ -5,7 +5,7 @@ import psycopg2
 from dotenv import load_dotenv
 import json
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine,text
 
 
 # Load environment variables from .env file
@@ -38,61 +38,51 @@ def convert_to_date(timestamp : int) -> datetime.date:
 
 def write_analytics_data(analytics_records:list[dict]) -> None:
     try:
-        if db_config["port"] == "3306":
-            connection = mysql.connector.connect(**db_config)
-            print("writing to MySql")
-        elif db_config["port"] == "5432":
-            connection = psycopg2.connect(**db_config)
-            print("writing to PostGre")
 
-        cursor = connection.cursor()
+        # Create the SQLAlchemy engine
+        db_url = get_db_url()
+        engine = create_engine(db_url)
 
         # Get today's date in 'YYYY-MM-DD' format
         today_date = datetime.now().date()
 
-        # Prepare SQL query to DELETE records for today's date
-        delete_query =  """
-                            DELETE FROM tyk_analytics_data WHERE RunDate = %s;
-                        """
+        with engine.connect() as connection:
+            # Prepare SQL query to DELETE records for today's date
+            delete_query = text("""
+                            DELETE FROM tyk_analytics_data WHERE RunDate = :run_date;
+                           """)
 
-        # Execute the delete query
-        cursor.execute(delete_query, (today_date,)) #to make it a sequence you need extra comma
-        print(f"Deleted records for RunDate: {today_date}")
+            # Execute the delete query
+            connection.execute(delete_query, {'run_date': today_date})
 
-        # Prepare SQL query to INSERT a record into the database.
-        insert_query = """
-            INSERT INTO tyk_analytics_data (RunDate, APIKey, APIName, ResponseCode, RequestDate)
-            VALUES (%s, %s, %s, %s, %s);
-            """
+            print(f"Deleted records for RunDate: {today_date}")
 
-        # Iterate over DataFrame rows and execute insert query for each row
-        for row in analytics_records:
-            cursor.execute(insert_query, (
-                today_date,
-                row['APIKey'],
-                row['APIName'],
-                row['ResponseCode'],
-                convert_to_date(row['TimeStamp'])
-            ))
+            # Prepare SQL query to INSERT a record into the database.
+            insert_query = text("""
+                INSERT INTO tyk_analytics_data (RunDate, APIKey, APIName, ResponseCode, RequestDate)
+                VALUES (:run_date, :api_key, :api_name, :response_code, :request_date);
+                """)
 
-        # Commit the transaction
-        connection.commit()
+            # Iterate over DataFrame rows and execute insert query for each row
+            for row in analytics_records:
+                connection.execute(insert_query, {
+                    'run_date': today_date,
+                    'api_key': row['APIKey'],
+                    'api_name': row['APIName'],
+                    'response_code': row['ResponseCode'],
+                    'request_date': convert_to_date(row['TimeStamp'])
+                })
+
+            # Commit the transaction
+            connection.commit()
+
         print(f"{len(analytics_records)} records inserted successfully.")
 
     except Exception as error:
-        print(f"Error inserting records: {error}")
+        print(f"Error writing to analytics: {error}")
         raise error
-    finally:
-        # Closing cursor and connection
-        if cursor:
-            cursor.close()
-            print("cursor is closed.")
-        if connection:
-            connection.close()
-            print("Database connection is closed.")
 
-
-def get_request_counts(db_url: str,
+def get_request_counts(
                        group_by_column_names: list[str],
                        start_date: date, end_date: date,
                        user_id: int | None) -> list[dict]:
@@ -102,6 +92,7 @@ def get_request_counts(db_url: str,
     end_date_str = end_date.strftime('%Y-%m-%d')
 
     #Step 1: Create SQLAlchemy engine
+    db_url = get_db_url()
     engine = create_engine(db_url)
 
     # Step 2: Execute the SQL query with dynamic date parameters
@@ -146,8 +137,7 @@ def fetch_and_group_by_column() -> None:
     #group_by_column_names = ["request_date"]
     #group_by_column_names = ["request_date", "ref_app"]
     group_by_column_names = ["ref_app", "user_id"]
-    result = get_request_counts(db_url=get_db_url(),
-                                group_by_column_names=group_by_column_names,
+    result = get_request_counts(group_by_column_names=group_by_column_names,
                                 start_date=start_date,
                                 end_date=end_date,
                                 user_id = 3)
