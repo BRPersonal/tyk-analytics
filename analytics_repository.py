@@ -4,6 +4,8 @@ import mysql.connector
 import psycopg2
 from dotenv import load_dotenv
 import json
+import pandas as pd
+from sqlalchemy import create_engine
 
 
 # Load environment variables from .env file
@@ -18,7 +20,23 @@ db_config = {
     'database': os.getenv('DB_DATABASE')
 }
 
-def get_reqeust_date(timestamp : int) -> datetime.date:
+def get_db_url() -> str :
+    suffix = f"{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+    if db_config["port"] == "3306":
+        print("Connecting to MySql")
+        return "mysql+pymysql://" + suffix
+    elif db_config["port"] == "5432":
+        print("Connecting to PostGre")
+        return "postgresql://" + suffix
+
+def correct_case_in_column_name(data_frame:pd.core.frame.DataFrame,column_name : str) -> str:
+    if column_name in data_frame.columns:
+        return column_name
+    else:
+        return column_name.lower()
+
+
+def convert_to_date(timestamp : int) -> datetime.date:
     readable_time = datetime.fromtimestamp(timestamp)
     date_part = readable_time.date()
     return date_part
@@ -59,7 +77,7 @@ def write_analytics_data(analytics_records:list[dict]) -> None:
                 row['APIKey'],
                 row['APIName'],
                 row['ResponseCode'],
-                get_reqeust_date(row['TimeStamp'])
+                convert_to_date(row['TimeStamp'])
             ))
 
         # Commit the transaction
@@ -78,77 +96,52 @@ def write_analytics_data(analytics_records:list[dict]) -> None:
             connection.close()
             print("Database connection is closed.")
 
-def dict_to_json_string(data_dict:dict) -> str:
-    def custom_date_serializer(obj):
-        if isinstance(obj, date):
-            return obj.strftime('%Y-%m-%d')  # format date as YYYY-mm-dd
-        raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
 
-    return json.dumps(data_dict, indent=4,default=custom_date_serializer) #convert to json with pretty printing
+def get_request_counts(db_url: str, group_by_column_names: list[str], start_date: date, end_date: date) -> list[dict]:
 
-def fetch_and_group_by_column(group_by_column: str) -> dict:
-    try:
-        if db_config["port"] == "3306":
-            connection = mysql.connector.connect(**db_config)
-            print("Reading from MySql")
-        elif db_config["port"] == "5432":
-            connection = psycopg2.connect(**db_config)
-            print("Reading from PostGre")
+    # Convert dates to string format for SQL query
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d')
 
-        with connection.cursor() as cursor:
-            # Define the SQL query
-            sql_query = """
-            SELECT 
-                a.RunDate, a.APIKey, a.APIName, a.APIID, a.ResponseCode,
-                a.Day, a.Month, a.TimeStamp,
-                b.userId, b.tier, b.refApp
-            FROM tyk_analytics_data a, key_tbl b
-            WHERE b.value = a.APIKey
-            ORDER BY b.userId DESC
-            """
+    #Step 1: Create SQLAlchemy engine
+    engine = create_engine(db_url)
 
-            # Execute the query
-            cursor.execute(sql_query)
+    # Step 2: Execute the SQL query with dynamic date parameters
+    query = f"""
+    SELECT
+        a.RequestDate as request_date,
+        b.refApp as ref_app,
+        b.userId as user_id,
+        COUNT(*) AS cntr
+    FROM tyk_analytics_data a, key_tbl b
+    WHERE a.RequestDate BETWEEN '{start_date_str}' AND '{end_date_str}'
+    and b.value = a.APIKey
+    GROUP BY a.RequestDate, b.refApp, b.userId;
+    """
 
-            # Fetch all results
-            results = cursor.fetchall()
+    # Fetching data into a DataFrame
+    df = pd.read_sql_query(query, engine)
 
-            #check if resultset is empty
-            if not results:
-                print("No records returned from the query")
-                return None
+    # Step 2: Group by one or more columns and sum 'cntr'.
+    grouped_df = df.groupby(group_by_column_names, as_index=False)['cntr'].sum()
 
-            # Get list of column names from cursor description which is a list of tuples.
-            #First element of a tuple is the columnName
-            column_names = [desc[0] for desc in cursor.description]
+    # Step 3: Convert to list of dictionaries. rename cntr as Count
+    result = grouped_df.rename(columns={'cntr': 'Count'}).to_dict(orient='records')
 
-            # Construct the dictionary grouped by given column
-            result_dict = {"groupBy" : group_by_column}
-
-            for row in results:
-                entry = dict(zip(column_names, row))  # Create a dictionary using column names
-                group_by_value = entry[group_by_column]  # Accessing 'grouo by' using field name
-
-                if group_by_value not in result_dict:
-                    result_dict[group_by_value] = []
-
-                result_dict[group_by_value].append(entry)
-
-            return result_dict
-
-    finally:
-        print("closing connection")
-        connection.close()
+    return result
 
 
-def test_group_by() -> None:
-    #result = fetch_and_group_by_column("tier")
-    result = fetch_and_group_by_column("refApp")
-    #result = fetch_and_group_by_column("userId")
+def fetch_and_group_by_column() -> None:
+    start_date = date(2024, 12, 1)
+    end_date = date(2024, 12, 2)
 
-    if result:
-        json_result = dict_to_json_string(result)
-        print(json_result)
+    group_by_column_names = ["request_date"]
+    #group_by_column_names = ["request_date", "ref_app"]
+    group_by_column_names = ["ref_app", "user_id"]
+    result = get_request_counts(get_db_url(),group_by_column_names,start_date,end_date)
+    print(result)
+
+
 
 if __name__ == "__main__":
-    test_group_by()
+    fetch_and_group_by_column()
