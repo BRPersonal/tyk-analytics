@@ -43,8 +43,8 @@ def main():
     analytics_records = fetch_analytics_data()
     print(f"records to be inserted={len(analytics_records)}")
 
-    if len(analytics_records) != 0:
-        write_analytics_data(analytics_records)
+    # if len(analytics_records) != 0:
+    #     write_analytics_data(analytics_records)
 
 
 
